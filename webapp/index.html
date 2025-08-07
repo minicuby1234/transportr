@@ -59,7 +59,7 @@
 
                     <div class="name-search search-option" style="display: none;">
                         <label for="name-input">Station Name:</label>
-                        <select id="name-input" class="select2" style="width: 100%;">
+                        <select id="name-input" class="select2 input--outlined" style="width: 100%;">
                             <option value="">Select a station...</option>
                         </select>
                     </div>
@@ -72,7 +72,7 @@
                             <label id="distance-label">Max Distance: 350m</label>
                             <input type="range" id="distance-input" min="50" max="1000" value="350" step="50">
                         </div>
-                        <select id="coords-input" class="select2" style="width: 100%; display: none;">
+                        <select id="coords-input" class="select2 input--outlined" style="width: 100%; display: none;">
                             <option value="">Select a nearby station...</option>
                         </select>
                     </div>
@@ -99,10 +99,11 @@
                     <div class="location-input">
                         <label for="from-input">From:</label>
                         <div class="location-field">
-                            <input type="text" id="from-input" placeholder="Enter starting location" class="location-text">
+                            <input type="text" id="from-input" placeholder="Enter starting location" class="location-text input--outlined">
                             <button type="button" id="from-gps" class="gps-btn" title="Use current location">📍</button>
                             <button type="button" id="from-map" class="map-btn" title="Select on map">🗺️</button>
                         </div>
+                        <div id="from-suggestions" class="card" style="display:none;"></div>
                     </div>
 
                     <div class="swap-locations">
@@ -112,10 +113,11 @@
                     <div class="location-input">
                         <label for="to-input">To:</label>
                         <div class="location-field">
-                            <input type="text" id="to-input" placeholder="Enter destination" class="location-text">
+                            <input type="text" id="to-input" placeholder="Enter destination" class="location-text input--outlined">
                             <button type="button" id="to-gps" class="gps-btn" title="Use current location">📍</button>
                             <button type="button" id="to-map" class="map-btn" title="Select on map">🗺️</button>
                         </div>
+                        <div id="to-suggestions" class="card" style="display:none;"></div>
                     </div>
 
                     <div class="via-input" style="display: none;">
@@ -234,6 +236,7 @@
             </div>
         </main>
 
+        <div id="snackbar" class="snackbar" role="status" aria-live="polite"></div>
         <footer>
             <p>Powered by <a href="https://github.com/minicuby1234/bgpp" target="_blank">bgpp</a> and <a href="https://github.com/minicuby1234/transportr" target="_blank">Transportr</a></p>
         </footer>

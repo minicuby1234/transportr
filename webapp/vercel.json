@@ -20,10 +20,5 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ],
-  "functions": {
-    "static/js/app.js": {
-      "maxDuration": 10
-    }
-  }
+  ]
 }

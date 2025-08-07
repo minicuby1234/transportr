@@ -16,12 +16,19 @@ const formatSeconds = (seconds) => {
 };
 
 const showError = (message) => {
-    const errorEl = document.getElementById('error');
-    errorEl.textContent = message;
-    errorEl.style.display = 'block';
-    setTimeout(() => {
-        errorEl.style.display = 'none';
-    }, 5000);
+    const bar = document.getElementById('snackbar');
+    if (bar) {
+        bar.textContent = message;
+        bar.classList.add('show');
+        setTimeout(() => bar.classList.remove('show'), 4000);
+    } else {
+        const errorEl = document.getElementById('error');
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        setTimeout(() => {
+            errorEl.style.display = 'none';
+        }, 5000);
+    }
 };
 
 const showLoading = (show = true) => {
@@ -767,10 +774,83 @@ const geocodeLocation = async (query) => {
     if (!res.ok) throw new Error('Geocoding failed');
     const data = await res.json();
     return data.map(item => ({
+
         name: item.display_name,
         coords: [parseFloat(item.lat), parseFloat(item.lon)]
     }));
 };
+
+let geocodeAbort;
+const geocodeCache = new Map();
+const debounce = (fn, ms = 300) => { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; };
+
+async function fetchGeocodeSuggestions(query) {
+    const q = query.trim();
+    if (!q) return [];
+    if (geocodeCache.has(q)) return geocodeCache.get(q);
+    if (geocodeAbort) geocodeAbort.abort();
+    geocodeAbort = new AbortController();
+    try {
+        const params = new URLSearchParams({
+            q,
+            format: 'json',
+            addressdetails: 1,
+            limit: 5,
+            'accept-language': 'sr-RS',
+            viewbox: '19.77,45.34,19.93,45.20',
+            bounded: 1
+        });
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, { signal: geocodeAbort.signal, headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('Geocoding failed');
+        const data = await res.json();
+        const suggestions = data.map(item => ({
+            name: item.display_name,
+            coords: [parseFloat(item.lat), parseFloat(item.lon)]
+        }));
+        geocodeCache.set(q, suggestions);
+        return suggestions;
+    } catch (e) {
+        return [];
+    }
+}
+
+function renderLocationSuggestions(items, target) {
+    const list = document.getElementById(`${target}-suggestions`);
+    if (!list) return;
+    list.innerHTML = '';
+    if (!items.length) {
+        list.style.display = 'none';
+        return;
+    }
+    items.forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-text';
+        btn.style.display = 'block';
+        btn.style.width = '100%';
+        btn.textContent = item.name;
+        btn.addEventListener('click', () => {
+            setNavigationField(target, item);
+            list.style.display = 'none';
+        });
+        list.appendChild(btn);
+    });
+    list.style.display = 'block';
+}
+
+function setNavigationField(target, item) {
+    const input = document.getElementById(`${target}-input`);
+    if (!input) return;
+    input.value = item.name;
+    input.dataset.lat = item.coords[0];
+    input.dataset.lng = item.coords[1];
+}
+
+const debouncedSuggest = debounce(async (value, target) => {
+    const results = await fetchGeocodeSuggestions(value);
+    renderLocationSuggestions(results, target);
+}, 300);
+
 
 const setupNavigationEventHandlers = () => {
     document.getElementById('departures-mode').addEventListener('click', () => switchMode('departures'));
@@ -787,6 +867,19 @@ const setupNavigationEventHandlers = () => {
     document.getElementById('from-map').addEventListener('click', () => selectFromMap('from'));
     document.getElementById('to-map').addEventListener('click', () => selectFromMap('to'));
     document.getElementById('via-map').addEventListener('click', () => selectFromMap('via'));
+document.addEventListener('DOMContentLoaded', () => {
+    const fromInput = document.getElementById('from-input');
+    const toInput = document.getElementById('to-input');
+    if (fromInput) {
+        fromInput.addEventListener('input', (e) => debouncedSuggest(e.target.value, 'from'));
+        fromInput.addEventListener('focus', (e) => debouncedSuggest(e.target.value, 'from'));
+    }
+    if (toInput) {
+        toInput.addEventListener('input', (e) => debouncedSuggest(e.target.value, 'to'));
+        toInput.addEventListener('focus', (e) => debouncedSuggest(e.target.value, 'to'));
+    }
+});
+
     
     document.getElementById('swap-btn').addEventListener('click', swapLocations);
     
@@ -874,9 +967,16 @@ const showNavLoading = (show) => {
 };
 
 const showNavError = (message) => {
-    const errorDiv = document.getElementById('nav-error');
-    errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
+    const bar = document.getElementById('snackbar');
+    if (bar) {
+        bar.textContent = message;
+        bar.classList.add('show');
+        setTimeout(() => bar.classList.remove('show'), 4000);
+    } else {
+        const errorDiv = document.getElementById('nav-error');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
