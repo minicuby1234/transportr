@@ -16,12 +16,19 @@ const formatSeconds = (seconds) => {
 };
 
 const showError = (message) => {
-    const errorEl = document.getElementById('error');
-    errorEl.textContent = message;
-    errorEl.style.display = 'block';
-    setTimeout(() => {
-        errorEl.style.display = 'none';
-    }, 5000);
+    const bar = document.getElementById('snackbar');
+    if (bar) {
+        bar.textContent = message;
+        bar.classList.add('show');
+        setTimeout(() => bar.classList.remove('show'), 4000);
+    } else {
+        const errorEl = document.getElementById('error');
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        setTimeout(() => {
+            errorEl.style.display = 'none';
+        }, 5000);
+    }
 };
 
 const showLoading = (show = true) => {
@@ -64,14 +71,12 @@ const generateMockData = (endpoint) => {
 const fetchAllStations = async () => {
     try {
         showLoading(true);
-        const stations = await apiRequest(`/api/stations/${CONFIG.CITY_CODE}/all`);
+        const stations = await apiRequest(`/stations/${CONFIG.CITY_CODE}/all`);
         allStations = stations;
-        populateStationSelect();
         return stations;
     } catch (error) {
         console.warn('Using mock data due to API failure');
         allStations = generateMockData('/all');
-        populateStationSelect();
         return allStations;
     } finally {
         showLoading(false);
@@ -80,7 +85,7 @@ const fetchAllStations = async () => {
 
 const fetchStationDepartures = async (query) => {
     const params = new URLSearchParams(query);
-    const endpoint = `/api/stations/${CONFIG.CITY_CODE}/search?${params}`;
+    const endpoint = `/stations/${CONFIG.CITY_CODE}/search?${params}`;
     return await apiRequest(endpoint);
 };
 
@@ -453,6 +458,17 @@ const setupEventListeners = () => {
         }
     });
 };
+const setupFAB = () => {
+    const fab = document.getElementById('fab-find-routes');
+    if (!fab) return;
+    fab.addEventListener('click', () => {
+        if (currentMode !== 'navigation') {
+            switchMode('navigation');
+        }
+        handleNavigationSearch();
+    });
+};
+
 
 const initApp = async () => {
     try {
@@ -461,8 +477,11 @@ const initApp = async () => {
         $('.select2').select2({ width: 'resolve' });
         
         setupEventListeners();
+        setupFAB();
         
         await fetchAllStations();
+        allStations.sort((a, b) => a.name.localeCompare(b.name, 'sr', { sensitivity: 'base' }));
+        populateStationSelect();
         
         onSearchModeChange();
         
@@ -476,6 +495,7 @@ const initApp = async () => {
         
         $('.select2').select2({ width: 'resolve' });
         setupEventListeners();
+        setupFAB();
         onSearchModeChange();
         
         console.log('App initialized with mock data');
@@ -515,17 +535,14 @@ const setupLocationAutocomplete = (inputId) => {
 
 const searchLocations = async (query, inputId) => {
     try {
-        const filteredStations = allStations.filter(station => 
-            station.name.toLowerCase().includes(query.toLowerCase())
-        );
-        
-        showLocationSuggestions(filteredStations, inputId);
+        const results = await geocodeLocation(query);
+        showLocationSuggestions(results, inputId);
     } catch (error) {
         console.error('Location search failed:', error);
     }
 };
 
-const showLocationSuggestions = (stations, inputId) => {
+const showLocationSuggestions = (locations, inputId) => {
     const input = document.getElementById(inputId);
     let dropdown = document.getElementById(`${inputId}-dropdown`);
     
@@ -538,31 +555,31 @@ const showLocationSuggestions = (stations, inputId) => {
     
     dropdown.innerHTML = '';
     
-    stations.slice(0, 5).forEach(station => {
+    locations.slice(0, 5).forEach(loc => {
         const item = document.createElement('div');
         item.className = 'location-dropdown-item';
-        item.textContent = station.name;
+        item.textContent = loc.name;
         item.addEventListener('click', () => {
-            input.value = station.name;
-            setLocationForInput(inputId, station);
+            input.value = loc.name;
+            setLocationForInput(inputId, loc);
             dropdown.style.display = 'none';
         });
         dropdown.appendChild(item);
     });
     
-    dropdown.style.display = stations.length > 0 ? 'block' : 'none';
+    dropdown.style.display = locations.length > 0 ? 'block' : 'none';
 };
 
-const setLocationForInput = (inputId, station) => {
+const setLocationForInput = (inputId, loc) => {
     switch (inputId) {
         case 'from-input':
-            fromLocation = station;
+            fromLocation = loc;
             break;
         case 'to-input':
-            toLocation = station;
+            toLocation = loc;
             break;
         case 'via-input':
-            viaLocation = station;
+            viaLocation = loc;
             break;
     }
 };
@@ -586,9 +603,11 @@ const searchTrips = async (fromLoc, toLoc, viaLoc = null) => {
 
 const calculateRoute = async (from, to, via = null) => {
     try {
-        const fromCoords = from.coords || await geocodeLocation(from.name);
-        const toCoords = to.coords || await geocodeLocation(to.name);
-        
+        const fromCoords = from.coords || (await geocodeLocation(from.name))[0]?.coords;
+        const toCoords = to.coords || (await geocodeLocation(to.name))[0]?.coords;
+        if (!fromCoords || !toCoords) {
+            throw new Error('Could not geocode one of the locations');
+        }
         return generateTransitRoute(fromCoords, toCoords, via);
     } catch (error) {
         console.warn('Using simplified routing due to API limitations');
@@ -740,21 +759,98 @@ const displayRouteOnMap = (routes, from, to, via = null) => {
     map.fitBounds(group.getBounds());
 };
 
-const geocodeLocation = async (locationName) => {
-    try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationName)}, Novi Sad, Serbia&limit=1`);
-        const results = await response.json();
-        
-        if (results.length > 0) {
-            return [parseFloat(results[0].lat), parseFloat(results[0].lon)];
-        }
-        throw new Error('Location not found');
-    } catch (error) {
-        console.warn('Geocoding failed, using station coordinates');
-        const station = allStations.find(s => s.name.toLowerCase().includes(locationName.toLowerCase()));
-        return station ? station.coords : CONFIG.NOVI_SAD_CENTER;
-    }
+const geocodeLocation = async (query) => {
+    const params = new URLSearchParams({
+        q: query,
+        format: 'json',
+        addressdetails: 1,
+        limit: 5,
+        'accept-language': 'sr-RS',
+        viewbox: '19.77,45.34,19.93,45.20',
+        bounded: 1
+    });
+    const url = `https://nominatim.openstreetmap.org/search?${params}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('Geocoding failed');
+    const data = await res.json();
+    return data.map(item => ({
+
+        name: item.display_name,
+        coords: [parseFloat(item.lat), parseFloat(item.lon)]
+    }));
 };
+
+let geocodeAbort;
+const geocodeCache = new Map();
+const debounce = (fn, ms = 300) => { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; };
+
+async function fetchGeocodeSuggestions(query) {
+    const q = query.trim();
+    if (!q) return [];
+    if (geocodeCache.has(q)) return geocodeCache.get(q);
+    if (geocodeAbort) geocodeAbort.abort();
+    geocodeAbort = new AbortController();
+    try {
+        const params = new URLSearchParams({
+            q,
+            format: 'json',
+            addressdetails: 1,
+            limit: 5,
+            'accept-language': 'sr-RS',
+            viewbox: '19.77,45.34,19.93,45.20',
+            bounded: 1
+        });
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, { signal: geocodeAbort.signal, headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('Geocoding failed');
+        const data = await res.json();
+        const suggestions = data.map(item => ({
+            name: item.display_name,
+            coords: [parseFloat(item.lat), parseFloat(item.lon)]
+        }));
+        geocodeCache.set(q, suggestions);
+        return suggestions;
+    } catch (e) {
+        return [];
+    }
+}
+
+function renderLocationSuggestions(items, target) {
+    const list = document.getElementById(`${target}-suggestions`);
+    if (!list) return;
+    list.innerHTML = '';
+    if (!items.length) {
+        list.style.display = 'none';
+        return;
+    }
+    items.forEach(item => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-text';
+        btn.style.display = 'block';
+        btn.style.width = '100%';
+        btn.textContent = item.name;
+        btn.addEventListener('click', () => {
+            setNavigationField(target, item);
+            list.style.display = 'none';
+        });
+        list.appendChild(btn);
+    });
+    list.style.display = 'block';
+}
+
+function setNavigationField(target, item) {
+    const input = document.getElementById(`${target}-input`);
+    if (!input) return;
+    input.value = item.name;
+    input.dataset.lat = item.coords[0];
+    input.dataset.lng = item.coords[1];
+}
+
+const debouncedSuggest = debounce(async (value, target) => {
+    const results = await fetchGeocodeSuggestions(value);
+    renderLocationSuggestions(results, target);
+}, 300);
+
 
 const setupNavigationEventHandlers = () => {
     document.getElementById('departures-mode').addEventListener('click', () => switchMode('departures'));
@@ -771,6 +867,19 @@ const setupNavigationEventHandlers = () => {
     document.getElementById('from-map').addEventListener('click', () => selectFromMap('from'));
     document.getElementById('to-map').addEventListener('click', () => selectFromMap('to'));
     document.getElementById('via-map').addEventListener('click', () => selectFromMap('via'));
+document.addEventListener('DOMContentLoaded', () => {
+    const fromInput = document.getElementById('from-input');
+    const toInput = document.getElementById('to-input');
+    if (fromInput) {
+        fromInput.addEventListener('input', (e) => debouncedSuggest(e.target.value, 'from'));
+        fromInput.addEventListener('focus', (e) => debouncedSuggest(e.target.value, 'from'));
+    }
+    if (toInput) {
+        toInput.addEventListener('input', (e) => debouncedSuggest(e.target.value, 'to'));
+        toInput.addEventListener('focus', (e) => debouncedSuggest(e.target.value, 'to'));
+    }
+});
+
     
     document.getElementById('swap-btn').addEventListener('click', swapLocations);
     
@@ -858,9 +967,16 @@ const showNavLoading = (show) => {
 };
 
 const showNavError = (message) => {
-    const errorDiv = document.getElementById('nav-error');
-    errorDiv.textContent = message;
-    errorDiv.style.display = 'block';
+    const bar = document.getElementById('snackbar');
+    if (bar) {
+        bar.textContent = message;
+        bar.classList.add('show');
+        setTimeout(() => bar.classList.remove('show'), 4000);
+    } else {
+        const errorDiv = document.getElementById('nav-error');
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
