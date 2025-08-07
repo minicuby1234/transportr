@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Novi Sad Transit - Real-time Public Transport</title>
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
     <link rel="stylesheet" href="static/css/style.css">
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -21,8 +26,11 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>🚌 Novi Sad Transit</h1>
+        <header class="app-bar">
+            <div class="app-bar-title">
+                <span class="material-icons">directions_bus</span>
+                <h1>Novi Sad Transit</h1>
+            </div>
             <p class="subtitle">Real-time public transport information for Novi Sad</p>
         </header>
 
@@ -218,6 +226,9 @@
                         </div>
                     </div>
                 </div>
+    <button type="button" id="fab-find-routes" class="fab" title="Find routes">
+        <span class="material-icons">search</span>
+    </button>
 
                 <div id="map" class="map"></div>
             </div>
