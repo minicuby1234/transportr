@@ -1,6 +1,6 @@
 
 const CONFIG = {
-    API_BASE_URL: 'https://bgpp.fly.dev',
+    API_BASE_URL: window.location.hostname === 'localhost' ? 'https://bgpp.fly.dev' : '/api',
     CITY_CODE: 'ns',
     
     NOVI_SAD_CENTER: [45.267136, 19.833549],
